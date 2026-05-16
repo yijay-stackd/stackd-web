@@ -18,6 +18,7 @@ const SEED: Omit<Student, "photoColor">[] = [
     tags: ["React", "Figma", "PyTorch"],
     contactType: "linkedin",
     contact: "linkedin.com/in/mayachen",
+    email: "maya@example.com",
     addedAt: "2026-05-14",
   },
   {

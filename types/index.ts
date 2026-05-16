@@ -3,4 +3,5 @@ export type {
   ContactType,
   OpenToId,
   Availability,
+  AuthUser,
 } from "./student";

@@ -6,10 +6,18 @@ import { FeedToolbar } from "./feed-toolbar";
 import { TagChips } from "./tag-chips";
 import { StudentRow } from "./student-row";
 import { FeedEmpty } from "./feed-empty";
+import { FeedSkeleton } from "./feed-skeleton";
+import { FeedError } from "./feed-error";
 
 const POPULAR_TAG_LIMIT = 6;
 
-export function Feed() {
+type DemoState = "auto" | "loading" | "error" | "empty";
+
+type Props = {
+  demoState?: DemoState;
+};
+
+export function Feed({ demoState = "auto" }: Props) {
   const { students, recentSlugs } = useStudents();
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -51,6 +59,18 @@ export function Feed() {
     window.scrollTo({ top: 160, behavior: "smooth" });
   }
 
+  function clearFilters() {
+    setQuery("");
+    setActiveTag(null);
+  }
+
+  const showSkeleton = demoState === "loading";
+  const showError = demoState === "error";
+  const showTrueEmpty = demoState === "empty" || (demoState === "auto" && students.length === 0);
+  const showFilterEmpty =
+    demoState === "auto" && students.length > 0 && filtered.length === 0;
+  const showList = demoState === "auto" && filtered.length > 0;
+
   return (
     <div className="animate-pageIn">
       <section className="mx-auto max-w-220 px-7 pt-14 pb-7 max-[640px]:px-5 max-[640px]:pt-9 max-[640px]:pb-5">
@@ -78,16 +98,26 @@ export function Feed() {
         />
 
         <div className="pb-20">
-          {filtered.length === 0 && <FeedEmpty />}
-          {filtered.map((s, i) => (
-            <StudentRow
-              key={s.slug}
-              student={s}
-              index={i}
-              isNew={recentSlugs.includes(s.slug)}
-              onTagClick={handleTagClick}
+          {showSkeleton && <FeedSkeleton />}
+          {showError && <FeedError onRetry={() => undefined} />}
+          {showTrueEmpty && <FeedEmpty />}
+          {showFilterEmpty && (
+            <FeedEmpty
+              query={query}
+              activeTag={activeTag}
+              onClearFilters={clearFilters}
             />
-          ))}
+          )}
+          {showList &&
+            filtered.map((s, i) => (
+              <StudentRow
+                key={s.slug}
+                student={s}
+                index={i}
+                isNew={recentSlugs.includes(s.slug)}
+                onTagClick={handleTagClick}
+              />
+            ))}
         </div>
 
         <footer className="flex flex-wrap justify-between gap-2.5 border-t border-line py-6 pb-9 font-mono text-[11px] tracking-[0.04em] text-muted">

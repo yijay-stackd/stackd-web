@@ -34,18 +34,18 @@ export function TagInput({ tags, onChange, max = 6 }: Props) {
   }
 
   return (
-    <div className="flex min-h-11 flex-wrap gap-1.5 rounded-md border border-gray-200 bg-white p-2 focus-within:border-gray-900">
+    <div className="flex min-h-11 flex-wrap gap-1.5 rounded-md border border-line-2 bg-white p-2 transition-[border-color,box-shadow] duration-150 focus-within:border-fg focus-within:shadow-focus-ring">
       {tags.map((t) => (
         <span
           key={t}
-          className="inline-flex items-center gap-1.5 rounded bg-gray-100 py-1 pl-2 pr-1 font-mono text-xs font-medium text-gray-900"
+          className="inline-flex items-center gap-1.5 rounded bg-[#f0eee5] py-[3px] pl-2.25 pr-[5px] font-mono text-xs font-medium text-fg"
         >
           {t}
           <button
             type="button"
             onClick={() => onChange(tags.filter((x) => x !== t))}
             aria-label={`Remove ${t}`}
-            className="grid h-4 w-4 place-items-center rounded text-xs text-gray-500 hover:bg-gray-200 hover:text-gray-900"
+            className="grid h-4 w-4 place-items-center rounded text-xs text-muted hover:bg-[rgba(10,10,10,0.1)] hover:text-fg"
           >
             ×
           </button>
@@ -58,7 +58,7 @@ export function TagInput({ tags, onChange, max = 6 }: Props) {
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKey}
           onBlur={commit}
-          className="flex-1 min-w-32 border-none bg-transparent p-1 text-sm outline-none"
+          className="min-w-32 flex-1 border-none bg-transparent p-1 text-[13.5px] outline-none"
           placeholder={
             tags.length === 0 ? "e.g. React, Figma, Python" : "Add another…"
           }

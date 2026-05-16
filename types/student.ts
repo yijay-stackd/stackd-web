@@ -28,7 +28,14 @@ export type Student = {
   tags: string[];
   contactType: ContactType;
   contact: string;
+  email?: string | null;
   photo?: string | null;
   photoColor: string;
   addedAt: string;
+  updatedAt?: string | null;
+};
+
+export type AuthUser = {
+  email: string;
+  slug: string | null;
 };
