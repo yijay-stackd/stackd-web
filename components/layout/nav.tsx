@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@/components/providers/auth-provider";
-import { useStudents } from "@/components/providers/students-provider";
+import { useAuth } from "@/features/auth/auth-provider";
+import { useMyProfile } from "@/features/profile/use-my-profile";
+import { toStudent } from "@/lib/api/profile-mapper";
 import { initials } from "@/utils/student";
 
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const { findByEmail, getStudent } = useStudents();
+  const { data: myProfile } = useMyProfile();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -19,9 +20,7 @@ export function Nav() {
   const onJoin = pathname === "/join";
   const onLogin = pathname === "/login";
 
-  const currentStudent = user
-    ? (user.slug && getStudent(user.slug)) || findByEmail(user.email) || null
-    : null;
+  const currentStudent = myProfile ? toStudent(myProfile) : null;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -40,8 +39,8 @@ export function Nav() {
     return "?";
   }
 
-  function handleSignOut() {
-    signOut();
+  async function handleSignOut() {
+    await signOut();
     setMenuOpen(false);
     router.push("/");
   }

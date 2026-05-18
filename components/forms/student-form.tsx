@@ -12,10 +12,11 @@ import type {
   OpenToId,
   Student,
 } from "@/types/student";
-import { PhotoUpload } from "@/components/join/photo-upload";
-import { TagInput } from "@/components/join/tag-input";
-import { CvUpload } from "@/components/join/cv-upload";
-import { AvailabilityField } from "@/components/join/availability-field";
+import { PhotoUpload } from "@/features/join/photo-upload";
+import { TagInput } from "@/features/join/tag-input";
+import { CvUpload } from "@/features/join/cv-upload";
+import { AvailabilityField } from "@/features/join/availability-field";
+import { UniversityAutocomplete } from "@/components/forms/university-autocomplete";
 
 const BIO_LIMIT = 100;
 const TAG_LIMIT = 6;
@@ -27,7 +28,13 @@ const baseInputClass =
 export type StudentFormValues = {
   name: string;
   photo: string | null;
+  // Raw photo File from the file picker — null when user kept the existing
+  // photo or never set one. Used by the create/update flow for multipart upload.
+  photoFile: File | null;
   university: string;
+  // Backend needs this to create/update a profile. Null when the user typed
+  // a freeform name without selecting from autocomplete — caller validates.
+  universityId: string | null;
   course: string;
   year: string;
   location: string | null;
@@ -40,6 +47,7 @@ export type StudentFormValues = {
   contact: string;
   cvDataUrl: string | null;
   cvName: string | null;
+  cvFile: File | null;
 };
 
 type Props = {
@@ -66,7 +74,14 @@ export function StudentForm({
   const init = initial || {};
   const [name, setName] = useState(init.name || "");
   const [photo, setPhoto] = useState<string | null>(init.photo || null);
+  // File handles for upload — initial values never have these (they came from
+  // the backend, not a file picker).
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [cvFile, setCvFile] = useState<File | null>(null);
   const [university, setUniversity] = useState(init.university || "");
+  // Backend's create-profile.dto requires universityId (UUID). Populated when
+  // the user picks from the autocomplete; cleared when they edit the field.
+  const [universityId, setUniversityId] = useState<string | null>(null);
   const [course, setCourse] = useState(init.course || "");
   const [year, setYear] = useState(init.year || "");
   const [location, setLocation] = useState(init.location || "");
@@ -128,7 +143,9 @@ export function StudentForm({
     onSubmit({
       name: name.trim(),
       photo: photo || null,
+      photoFile,
       university: university.trim(),
+      universityId,
       course: course.trim(),
       year,
       location: location.trim() || null,
@@ -143,6 +160,7 @@ export function StudentForm({
       contact: contact.trim(),
       cvDataUrl,
       cvName,
+      cvFile,
     });
   }
 
@@ -152,7 +170,12 @@ export function StudentForm({
   return (
     <form onSubmit={handleSubmit} noValidate>
       <Field label="Profile photo" optional dataField="photo">
-        <PhotoUpload value={photo} onChange={setPhoto} name={name} />
+        <PhotoUpload
+          value={photo}
+          onChange={setPhoto}
+          onFileChange={setPhotoFile}
+          name={name}
+        />
       </Field>
 
       <Field label="Full name" dataField="name" error={errors.name}>
@@ -169,14 +192,19 @@ export function StudentForm({
       </Field>
 
       <Field label="University" dataField="university" error={errors.university}>
-        <input
+        <UniversityAutocomplete
+          value={university}
+          onChange={(next) => {
+            setUniversity(next);
+            // Editing the field invalidates the previous selection — clear
+            // the id so we don't submit a stale UUID.
+            if (universityId) setUniversityId(null);
+          }}
+          onPick={(row) => setUniversityId(row?.id ?? null)}
+          hasError={Boolean(errors.university)}
           className={`${baseInputClass} ${
             errors.university ? "border-danger shadow-err-ring" : "border-line-2"
           }`}
-          type="text"
-          value={university}
-          onChange={(e) => setUniversity(e.target.value)}
-          placeholder="Stanford University"
         />
       </Field>
 
@@ -329,6 +357,7 @@ export function StudentForm({
             setCvDataUrl(dataUrl);
             setCvName(fileName);
           }}
+          onFileChange={setCvFile}
         />
       </Field>
 

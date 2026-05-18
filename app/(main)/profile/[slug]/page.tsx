@@ -1,5 +1,5 @@
 import { use } from "react";
-import { ProfileDetail } from "@/components/profile/profile-detail";
+import { ProfileDetail } from "@/features/profile/profile-detail";
 
 type Params = { slug: string };
 

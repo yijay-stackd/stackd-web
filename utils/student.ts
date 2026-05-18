@@ -10,7 +10,8 @@ export function initials(name: string): string {
     .toUpperCase();
 }
 
-export function statusLabel(id: string): string {
+export function statusLabel(id: string | null | undefined): string {
+  if (!id) return "";
   const o = OPEN_TO_OPTIONS.find((opt) => opt.id === id);
   return o ? o.label : id;
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { DM_Sans, DM_Mono } from "next/font/google";
-import { StudentsProvider } from "@/components/providers/students-provider";
-import { AuthProvider } from "@/components/providers/auth-provider";
+import { AuthProvider } from "@/features/auth/auth-provider";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { Nav } from "@/components/layout/nav";
 import "./globals.css";
 
@@ -30,12 +30,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${dmSans.variable} ${dmMono.variable}`}>
       <body>
-        <AuthProvider>
-          <StudentsProvider>
+        <QueryProvider>
+          <AuthProvider>
             <Nav />
             {children}
-          </StudentsProvider>
-        </AuthProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

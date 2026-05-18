@@ -24,8 +24,8 @@ export const YEAR_OPTIONS = [
 
 export const OPEN_TO_OPTIONS: { id: OpenToId; label: string }[] = [
   { id: "internships", label: "Internships" },
-  { id: "full-time", label: "Full-time" },
-  { id: "part-time", label: "Part-time" },
+  { id: "full_time", label: "Full-time" },
+  { id: "part_time", label: "Part-time" },
   { id: "freelance", label: "Freelance" },
   { id: "research", label: "Research" },
 ];

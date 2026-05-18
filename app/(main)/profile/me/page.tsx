@@ -2,30 +2,27 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/components/providers/auth-provider";
-import { useStudents } from "@/components/providers/students-provider";
+import { useAuth } from "@/features/auth/auth-provider";
+import { useMyProfile } from "@/features/profile/use-my-profile";
 
 export default function ProfileMePage() {
   const router = useRouter();
-  const { user } = useAuth();
-  const { findByEmail } = useStudents();
+  const { status } = useAuth();
+  const { data: profile, isLoading } = useMyProfile();
 
   useEffect(() => {
-    if (!user) {
+    if (status === "unauthenticated") {
       router.replace("/login");
       return;
     }
-    if (user.slug) {
-      router.replace(`/profile/${user.slug}`);
-      return;
-    }
-    const existing = findByEmail(user.email);
-    if (existing) {
-      router.replace(`/profile/${existing.slug}`);
-    } else {
+    if (status !== "authenticated" || isLoading) return;
+    // Authed but no profile yet → join flow. Authed + profile → public URL.
+    if (!profile) {
       router.replace("/join");
+    } else {
+      router.replace(`/profile/${profile.slug}`);
     }
-  }, [user, findByEmail, router]);
+  }, [status, profile, isLoading, router]);
 
   return (
     <div className="mx-auto max-w-220 px-7 py-15 text-center text-muted max-[640px]:px-5">

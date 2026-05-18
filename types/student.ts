@@ -1,9 +1,11 @@
 export type ContactType = "linkedin" | "email" | "portfolio";
 
+// Matches the backend's EngagementValue exactly so no runtime mapping is
+// needed when reading from or writing to the API.
 export type OpenToId =
   | "internships"
-  | "full-time"
-  | "part-time"
+  | "full_time"
+  | "part_time"
   | "freelance"
   | "research";
 
@@ -37,5 +39,4 @@ export type Student = {
 
 export type AuthUser = {
   email: string;
-  slug: string | null;
 };

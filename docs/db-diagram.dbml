@@ -1,0 +1,437 @@
+// Stackd — DB diagram
+// Paste this entire file into https://dbdiagram.io/d
+//
+// Notes:
+// - Partial unique indexes (WHERE deleted_at IS NULL) are noted in the index
+//   comment because DBML doesn't model the predicate; treat them as unique.
+// - CHECK constraints, triggers, RLS policies, and storage bucket rules live
+//   in backend-schema.md; DBML can't visualize them. CHECKs are inlined in
+//   column notes where they belong logically.
+// - `auth.users` is managed by Supabase Auth — stubbed here so relationships
+//   render correctly. Login email lives there; it is intentionally distinct
+//   from any contact email a student posts on their profile.
+//
+// Deferred to v2 (intentionally NOT in schema yet):
+// - profile_projects (id, profile_id, title, description, url, image_key,
+//   sort_order) — students showcasing work beyond the single portfolio link.
+//   Build when product validates need.
+// - profile_files (id, profile_id, kind, storage_key, content_type, size, ...)
+//   — extract cv_key/cv_name into here when adding any second file kind
+//   (transcripts, portfolio PDFs, multiple CVs). First refactor.
+// - outbox_events — transactional outbox for BullMQ when async jobs come in.
+// - moderation_events partitioning — PARTITION BY RANGE (created_at) monthly
+//   when row count crosses ~10M.
+// - i18n: skills.label_i18n / universities.name_i18n jsonb if going multilingual.
+
+Project stackd {
+  database_type: 'PostgreSQL'
+  Note: 'Stackd profile directory — NestJS + Prisma + Supabase (Postgres + Auth + Storage)'
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+Enum year_enum {
+  "1st"
+  "2nd"
+  "3rd"
+  "4th"
+  "Masters"
+  "PhD"
+}
+
+Enum engagement_type_enum {
+  internships
+  full_time     // display as "Full-time"
+  part_time     // display as "Part-time"
+  freelance
+  research
+}
+
+Enum profile_status_enum {
+  active      // visible in feed
+  hidden      // user-toggled private (user can revert)
+  suspended   // admin action — ToS / fake profile (only admin can revert)
+}
+
+Enum skill_moderation_enum {
+  approved    // ESCO-seeded or admin-promoted or auto-promoted (≥5 independent users)
+  pending     // user-created, awaiting promotion; visible only on creator's profile
+  rejected    // admin-rejected; cannot be re-created (slug blacklisted)
+}
+
+Enum contact_kind_enum {
+  linkedin
+  email
+  portfolio
+  instagram
+  whatsapp
+  wechat
+  telegram
+  github
+  twitter
+  website
+  other
+}
+
+Enum report_target_type_enum {
+  profile
+  skill
+}
+
+Enum report_reason_enum {
+  inappropriate
+  spam
+  fake
+  harassment
+  copyright
+  other
+}
+
+Enum report_status_enum {
+  open
+  resolved
+  dismissed
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// External (Supabase Auth)
+// ─────────────────────────────────────────────────────────────────────────────
+
+Table auth.users {
+  id uuid [pk]
+  email citext [not null]
+
+  Note: '''
+  Managed by Supabase Auth. Not created by our migrations.
+  Source of truth for LOGIN email. Never duplicated into public.profiles.
+  A student's posted contact email lives in profile_contacts and is
+  intentionally separate (login = school email, contact = personal email).
+  '''
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Core: profiles
+// ─────────────────────────────────────────────────────────────────────────────
+
+Table profiles {
+  id                  uuid                       [pk, default: `gen_random_uuid()`]
+  user_id             uuid                       [not null]
+
+  // Identity
+  slug                citext                     [not null]
+  name                text                       [not null]
+  photo_key           text
+  avatar_color_seed   smallint                   [not null, default: 0, note: 'deterministic fallback color index when photo_key is null']
+
+  // Academic — university is FK-only (autocomplete from ROR-seeded
+  // universities table; no free-text fallback). New universities go through
+  // a moderation queue before being selectable.
+  university_id       uuid                       [not null]
+  course              text                       [not null]
+  year                year_enum                  [not null]
+
+  // Location — structured for filtering (free-text was a dead end:
+  // "SG" / "Singapore" / "Singapore (remote ok)" all collapse here)
+  country_code        char(2)                    [note: 'ISO 3166-1 alpha-2; null = unspecified']
+  city                text                       [note: 'free text, autocomplete from existing values; null = unspecified']
+  is_remote_ok        boolean                    [not null, default: false]
+
+  // Pitch
+  bio                 varchar(100)               [not null]
+  engagement_types    "engagement_type_enum[]"   [not null, default: `'{}'`, note: 'CHECK array_length(engagement_types, 1) <= 5; CHECK no duplicate values']
+
+  // Availability (NULL from = "Now", NULL to = "Ongoing")
+  // CHECK (available_from IS NULL OR available_to IS NULL OR available_from <= available_to)
+  // `internship_length` removed — derivable from (available_to - available_from)
+  available_from      date
+  available_to        date
+
+  // CV
+  cv_key              text
+  cv_name             text
+
+  // Read-optimized denormalization for recruiter filter
+  // ("Y3 CS students who know React AND Figma" — array contains-all is
+  // ~10x faster than joining profile_skills twice). Maintained by trigger
+  // on profile_skills INSERT/DELETE; the trigger filters by
+  // skills.moderation_status = 'approved' so pending/rejected skills
+  // never reach the recruiter filter via this denormalization.
+  // CHECK array_length(skill_slugs, 1) <= 6
+  skill_slugs         "citext[]"                 [not null, default: `'{}'`]
+
+  // State
+  status              profile_status_enum        [not null, default: 'active']
+  status_reason       text                       [note: 'admin-supplied reason when status = suspended; null otherwise']
+  status_changed_at   timestamptz                [not null, default: `now()`]
+  search_vector       tsvector
+  version             integer                    [not null, default: 1, note: 'optimistic lock; UPDATE WHERE version = $current then bump']
+  created_at          timestamptz                [not null, default: `now()`]
+  updated_at          timestamptz                [not null, default: `now()`, note: 'auto-bumped by moddatetime trigger']
+  deleted_at          timestamptz                [note: 'orthogonal to status — a deleted profile WAS active/hidden/suspended at delete time']
+
+  Indexes {
+    slug                           [unique, name: 'profiles_slug_live_idx',    note: 'partial: WHERE deleted_at IS NULL']
+    user_id                        [unique, name: 'profiles_user_id_live_idx', note: 'partial: WHERE deleted_at IS NULL']
+    (created_at, id)               [name: 'profiles_feed_idx',                 note: 'partial: WHERE status = active AND deleted_at IS NULL']
+    status                         [name: 'profiles_status_idx',               note: 'admin dashboard: filter by suspended/hidden']
+    (university_id, created_at)    [name: 'profiles_university_feed_idx',      note: 'partial: WHERE status = active AND deleted_at IS NULL']
+    (`year`, created_at)           [name: 'profiles_year_feed_idx',            note: 'partial: WHERE status = active AND deleted_at IS NULL']
+    (available_from, available_to) [name: 'profiles_available_idx',            note: 'partial: WHERE status = active AND deleted_at IS NULL']
+    search_vector                  [type: gin, name: 'profiles_search_idx',    note: 'partial: WHERE status = active AND deleted_at IS NULL']
+    engagement_types               [type: gin, name: 'profiles_engagement_idx', note: 'partial: WHERE status = active AND deleted_at IS NULL']
+    skill_slugs                    [type: gin, name: 'profiles_skills_idx',    note: 'partial: live + public; powers AND-filter']
+  }
+
+  Note: '''
+  One row per public student profile.
+  - Partial unique indexes mean soft-deleted rows do NOT block slug/user reuse.
+  - `search_vector` maintained by trigger (name A / course+university B / bio C).
+  - `skill_slugs` denormalized from profile_skills for fast multi-skill filtering.
+  - Hard delete via purge_profile(profile_id) function: cascades to skills,
+    contacts, storage objects, then writes a single moderation_events row
+    with action = 'purge' (target survives hard delete via polymorphic id).
+  - Restore is via login (auth.users survives soft-delete); UI flips
+    deleted_at = NULL. No token-based email restore flow.
+  '''
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Skills (dictionary + join)
+// ─────────────────────────────────────────────────────────────────────────────
+
+Table skills {
+  slug              citext                [pk, note: 'kebab-case normalized on write']
+  label             text                  [not null, note: 'display name e.g. "Ice Sculpting"']
+  canonical_slug    citext                            [note: 'if set, this skill is an alias; reads use COALESCE(canonical_slug, slug)']
+  esco_uri          text                              [note: 'ESCO concept URI; null for user-created']
+  category          text                              [note: 'ESCO category (Skill / Knowledge / Transversal); null for user-created']
+  moderation_status skill_moderation_enum [not null, default: 'approved', note: 'STAGE 1 (MVP): default approved — full freedom. STAGE 2 (post-incident or admin capacity): flip default to pending and enable quarantine UX.']
+  usage_count       integer               [not null, default: 0]
+  created_by        uuid                              [note: 'auth user who first created this skill; null for ESCO seed']
+  created_at        timestamptz           [not null, default: `now()`]
+
+  Indexes {
+    (usage_count, slug) [name: 'skills_usage_idx',          note: 'partial: WHERE moderation_status = approved']
+    canonical_slug      [name: 'skills_alias_idx',          note: 'partial: WHERE canonical_slug IS NOT NULL']
+    label               [type: gin, name: 'skills_label_trgm_idx', note: 'gin_trgm_ops for autocomplete; partial: WHERE moderation_status = approved']
+    moderation_status   [name: 'skills_moderation_idx',     note: 'admin queue: WHERE moderation_status = pending']
+  }
+
+  Note: '''
+  Seeded from ESCO (https://esco.ec.europa.eu) — ~13.5k cross-disciplinary
+  skills covering every profession (ice sculpting, cooking, programming,
+  music, etc.). Do not reinvent — ESCO is the open equivalent of LinkedIn
+  Skills, EU-maintained, CC-licensed.
+
+  - Autocomplete-first UX: users pick from existing entries, ranked by
+    usage_count + trigram similarity on label.
+  - Free-form fallback allowed; new entries have esco_uri=null
+    (esco_uri IS NOT NULL is the source of truth for "ESCO-seeded").
+  - Duplicates handled by admin merge: set canonical_slug on the loser,
+    rewrite profile_skills; logged as moderation_events row (action = 'merge_skill').
+  - Rejection (moderation_status = rejected) triggers cascade: AFTER UPDATE
+    trigger removes all profile_skills rows pointing to the rejected slug
+    and rebuilds profiles.skill_slugs for each affected profile. Single
+    moderation_events row (action = 'reject_skill') captures affected profile count.
+  - Future: embedding-based suggest-on-write to prevent dupe accumulation.
+  - usage_count maintained by trigger on profile_skills; weekly reconcile job.
+  '''
+}
+
+Table profile_skills {
+  profile_id  uuid     [not null]
+  skill_slug  citext   [not null]
+  sort_order  smallint [not null]
+
+  Indexes {
+    (profile_id, skill_slug) [pk]
+    skill_slug               [name: 'profile_skills_skill_idx']
+    (profile_id, sort_order) [unique, name: 'sort_order_unique_per_profile']
+  }
+
+  Note: '''
+  Many-to-many. `sort_order` preserves the user-entered order (0..5).
+  AFTER INSERT/DELETE trigger:
+    1. bumps/decrements skills.usage_count
+    2. rebuilds profiles.skill_slugs for the affected profile
+  '''
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contacts (1:N — open-ended kinds: linkedin, email, instagram, whatsapp, ...)
+// ─────────────────────────────────────────────────────────────────────────────
+
+Table profile_contacts {
+  id          uuid              [pk, default: `gen_random_uuid()`]
+  profile_id  uuid              [not null]
+  kind        contact_kind_enum [not null]
+  value       text              [not null]
+  label       text
+  sort_order  smallint          [not null, default: 0]
+  created_at  timestamptz       [not null, default: `now()`]
+
+  Indexes {
+    (profile_id, sort_order) [name: 'profile_contacts_order_idx']
+    (profile_id, kind)       [name: 'profile_contacts_kind_idx']
+    // Postgres: CREATE UNIQUE INDEX profile_contacts_dedup_idx
+    //          ON profile_contacts (profile_id, kind, lower(value));
+    // DBML can't model the lower() expression; enforced in migration.
+  }
+
+  Note: '''
+  Posted contact methods. Always separate from auth.users.email
+  (login email ≠ contact email by design — students log in with their
+  school email but post a personal one).
+
+  No unique on (profile_id, kind): students may legitimately list two
+  WhatsApp numbers (dual citizenship), two emails (school + personal
+  display), or two websites. Order via sort_order.
+
+  Exact-duplicate prevention via case-insensitive expression index
+  on (profile_id, kind, lower(value)) — added in migration since DBML
+  cannot model expression indexes.
+
+  `value` is free text; format validated in app layer per kind
+  (URL for linkedin/portfolio/website, email for email, handle or
+  phone for whatsapp/wechat/telegram, etc.). `label` is optional
+  user-facing tag e.g. "Work email".
+  '''
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Universities (dim)
+// ─────────────────────────────────────────────────────────────────────────────
+
+Table universities {
+  id           uuid        [pk, default: `gen_random_uuid()`]
+  ror_id       text        [unique, note: 'ROR identifier e.g. "https://ror.org/03vek6s52"; null for admin-added']
+  name         text        [not null, note: 'canonical display name']
+  name_norm    citext      [not null, unique, note: 'GENERATED ALWAYS AS (lower(name)) STORED']
+  aliases      "text[]"    [not null, default: `'{}'`, note: 'from ROR: ["Harvard", "Harvard U", "Université Harvard"]']
+  country      text                    [note: 'ISO 3166-1 alpha-2']
+  is_verified  boolean     [not null, default: false, note: 'true for ROR-sourced; false for user-submitted pending review']
+  created_at   timestamptz [not null, default: `now()`]
+
+  Indexes {
+    name_norm [type: gin, name: 'universities_name_trgm_idx',    note: 'gin_trgm_ops for autocomplete']
+    aliases   [type: gin, name: 'universities_aliases_trgm_idx', note: 'autocomplete matches name OR any alias']
+  }
+
+  Note: '''
+  Seeded from ROR (https://ror.org) — ~100k institutions globally with
+  pre-mapped aliases. Solves the "Harvard" vs "Harvard University" vs
+  "Harvard U" problem at the data layer instead of via fuzzy match heuristics.
+
+  - Profile creation form is autocomplete-only against name + aliases.
+  - "Can't find your university?" submits to moderation queue; admin
+    promotes to is_verified=true and (ideally) maps to a ROR entry.
+  - No free-text on profiles: profiles.university_id is required, no
+    raw university text column.
+  '''
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Operational tables
+// ─────────────────────────────────────────────────────────────────────────────
+
+Table content_reports {
+  id           uuid                       [pk, default: `gen_random_uuid()`]
+  reporter_id  uuid                       [not null]
+  target_type  report_target_type_enum    [not null]
+  target_id    text                       [not null, note: 'uuid for profile, citext slug for skill']
+  reason       report_reason_enum         [not null]
+  details      text                                  [note: 'free-text from reporter, optional']
+  status       report_status_enum         [not null, default: 'open']
+  resolved_by  uuid                                  [note: 'admin who closed the report']
+  resolved_at  timestamptz
+  created_at   timestamptz                [not null, default: `now()`]
+
+  Indexes {
+    (reporter_id, target_type, target_id) [unique, name: 'reports_one_per_reporter_idx', note: 'anti-flood: each reporter can report each target once; re-report = UPDATE existing row']
+    (status, created_at)                  [name: 'reports_open_queue_idx', note: 'admin dashboard: WHERE status = open']
+    (target_type, target_id)              [name: 'reports_target_idx',     note: 'lookup all reports against a profile/skill']
+    (reporter_id, created_at)             [name: 'reports_reporter_idx',   note: 'detect serial reporters / abuse']
+  }
+
+  Note: '''
+  Community-driven moderation. Any signed-in user can report a profile or
+  skill. Admin reviews the open queue and either resolves (takes action:
+  suspend profile, reject skill) or dismisses (no action needed).
+
+  Spam protection: rate-limit report creation per reporter (e.g., 10/day)
+  via middleware. Repeated dismissed reports from the same user → flag
+  for review.
+  '''
+}
+
+// Rate limiting lives in middleware, not Postgres:
+//   - MVP: @nestjs/throttler with in-memory store
+//   - Scale-out: swap in Redis-backed store (no code change beyond config)
+// Forensic events (e.g. "this email triggered rate limit 50x today → flag")
+// are logged to moderation_events with action = 'rate_limited'.
+
+Table moderation_events {
+  id          bigserial   [pk]
+  actor_id    uuid                    [note: 'admin/user who took the action; null for system events']
+  target_type text        [not null,  note: "'profile' | 'skill' | 'report' | 'auth'"]
+  target_id   text        [not null,  note: 'uuid for profiles/reports, citext slug for skills, email/ip for auth']
+  action      text        [not null,  note: "'suspend' | 'unsuspend' | 'purge' | 'reject_skill' | 'merge_skill' | 'resolve_report' | 'dismiss_report' | 'rate_limited'"]
+  reason      text                    [note: "admin's written rationale; null for system actions"]
+  metadata    jsonb                   [note: 'ip, user_agent, request_id, affected_count, etc.']
+  created_at  timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (target_type, target_id, created_at) [name: 'moderation_events_target_idx']
+    (actor_id, created_at)               [name: 'moderation_events_actor_idx']
+    (action, created_at)                 [name: 'moderation_events_action_idx']
+  }
+
+  Note: '''
+  Append-only log of admin/system actions only. Routine user edits are NOT
+  logged here — `created_at`/`updated_at`/`status_changed_at` on the affected
+  table already capture them.
+
+  Scope intentionally narrow: admin moderation decisions, GDPR purges, skill
+  rejections/merges, report resolutions, rate-limit forensics. Anything where
+  the row's current state can't answer "who did this and why".
+
+  Polymorphic target_type/target_id (text, no FK) so events survive hard
+  deletes of the target row — required for GDPR purge proof.
+  '''
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Relationships
+// ─────────────────────────────────────────────────────────────────────────────
+
+// profiles → auth (1:1 via partial unique)
+Ref: profiles.user_id > auth.users.id [delete: cascade]
+
+// profiles ↔ universities (many → one, required — autocomplete-only from ROR seed)
+Ref: profiles.university_id > universities.id [delete: restrict]
+
+// skills self-ref for aliases (canonical_slug → slug)
+Ref: skills.canonical_slug > skills.slug [delete: set null]
+
+// profile_skills ↔ profiles (many → one)
+Ref: profile_skills.profile_id > profiles.id [delete: cascade]
+
+// profile_skills ↔ skills (many → one)
+Ref: profile_skills.skill_slug > skills.slug [delete: restrict]
+
+// profile_contacts ↔ profiles (many → one)
+Ref: profile_contacts.profile_id > profiles.id [delete: cascade]
+
+// skills.created_by → auth (provenance for moderation; nullable for ESCO seed)
+Ref: skills.created_by > auth.users.id [delete: set null]
+
+// content_reports ↔ reporter (always required)
+Ref: content_reports.reporter_id > auth.users.id [delete: cascade]
+Ref: content_reports.resolved_by > auth.users.id [delete: set null]
+
+// moderation_events ↔ actors (target FKs are intentionally NOT modeled —
+// target_id is polymorphic across target_type and must survive hard-deletes
+// of the target row for forensic purposes / GDPR purge proof)
+Ref: moderation_events.actor_id > auth.users.id [delete: set null]

@@ -30,6 +30,7 @@
   --animate-pop: pop 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both;
   --animate-fadeIn: fadeIn 0.3s ease;
   --animate-fall: fall linear forwards;
+  --animate-otpShake: otpShake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97);
 
   --background-image-row-hover: linear-gradient(90deg, transparent, #f3f1ea 6%, #f3f1ea 94%, transparent);
 
@@ -88,4 +89,11 @@
 @keyframes fall {
   0% { transform: translate3d(0, -40px, 0) rotate(0deg); opacity: 1; }
   100% { transform: translate3d(var(--dx), 110vh, 0) rotate(var(--rot)); opacity: 0.9; }
+}
+@keyframes otpShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
 }
