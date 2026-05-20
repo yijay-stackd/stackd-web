@@ -11,7 +11,7 @@ import {
 import { dedupeSkillLabels, MAX_SKILLS, skillsApi } from "@/lib/api/skills";
 import { profileFilesApi } from "@/lib/api/profile-files";
 import { profileContactsApi } from "@/lib/api/profile-contacts";
-import { profilesKeys } from "@/lib/api/profiles";
+import { profilesApi, profilesKeys } from "@/lib/api/profiles";
 import { getHttpClient } from "@/lib/http/client";
 import { ApiError } from "@/lib/http/errors";
 import { Celebration } from "./celebration";
@@ -169,12 +169,14 @@ export function JoinForm() {
         return;
       }
 
-      // Follow-ups (skills/contact/cv) wrote to the backend, but the
-      // bySlug + mine caches were primed from the create response — which
-      // didn't include any of them. Drop those entries so the next read
-      // refetches the now-complete row.
-      qc.removeQueries({ queryKey: profilesKeys.bySlug(profile.slug) });
-      qc.removeQueries({ queryKey: profilesKeys.mine() });
+      // useCreateProfile deliberately does NOT prime mine/bySlug — the POST
+      // response is incomplete (skills/contacts/photo/cv land via follow-ups
+      // above). This is the one place that holds the canonical row: refetch
+      // the now-complete profile and seed both caches BEFORE navigating, so
+      // the profile page paints fully on first render with no flicker.
+      const fresh = await profilesApi.bySlug(getHttpClient(), profile.slug);
+      qc.setQueryData(profilesKeys.bySlug(profile.slug), fresh);
+      qc.setQueryData(profilesKeys.mine(), fresh);
 
       // Clean success → celebrate, then redirect.
       setFirstName(values.name.split(" ")[0]);

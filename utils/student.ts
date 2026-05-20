@@ -50,6 +50,12 @@ export function contactLabel(type: ContactType): string {
   return "Visit portfolio";
 }
 
+export function yearLabel(year: string | null | undefined): string {
+  if (!year) return "";
+  if (year === "Masters" || year === "PhD") return year;
+  return `${year} year`;
+}
+
 export function slugify(name: string): string {
   const base = name
     .trim()

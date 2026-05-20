@@ -12,5 +12,11 @@ export function useProfileBySlug(slug: string | null | undefined) {
     enabled: Boolean(slug),
     queryFn: ({ signal }) =>
       profilesApi.bySlug(getHttpClient(), slug as string, signal),
+    // Always refetch when the profile page mounts. Cached data primed by
+    // create/edit mutations is sometimes incomplete (side-effect writes
+    // happen AFTER the initial profile response), so we'd otherwise paint
+    // an empty shell — no photo, no skills, no contact — until the user
+    // refreshed. Force-fresh fixes that for free.
+    refetchOnMount: "always",
   });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { initials, statusLabel } from "@/utils/student";
+import { initials, statusLabel, yearLabel } from "@/utils/student";
 import type { Student } from "@/types/student";
 
 type Props = {
@@ -63,7 +63,9 @@ export function StudentRow({ student, index, isNew, onTagClick }: Props) {
           )}
         </div>
         <div className="mt-[3px] overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-muted">
-          {student.university} · {student.course} · {student.year} year
+          {[student.university, student.course, yearLabel(student.year)]
+            .filter(Boolean)
+            .join(" · ")}
         </div>
         <div className="mt-1.5 text-[13.5px] text-fg opacity-[0.78] line-clamp-1 max-[720px]:line-clamp-2">
           {student.bio}

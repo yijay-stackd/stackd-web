@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { useProfileBySlug } from "./use-profile-by-slug";
 import { useFetchSignedCv } from "./use-profile-files";
 import { toStudent } from "@/lib/api/profile-mapper";
 import { ApiError } from "@/lib/http/errors";
-import { formatAvailability, initials, statusLabel } from "@/utils/student";
+import { formatAvailability, initials, statusLabel, yearLabel } from "@/utils/student";
 import { ProfileQuickFacts } from "./profile-quickfacts";
 import { ProfileContact } from "./profile-contact";
-import { ProfileNotFound } from "./profile-not-found";
 
 type Props = {
   slug: string;
@@ -35,7 +35,7 @@ export function ProfileDetail({ slug }: Props) {
   // Backend returns 404 → ApiError(status=404). Anything else is real.
   if (error) {
     if (error instanceof ApiError && error.status === 404) {
-      return <ProfileNotFound />;
+      notFound();
     }
     return (
       <div className="mx-auto max-w-220 px-7 py-20 text-center">
@@ -46,7 +46,7 @@ export function ProfileDetail({ slug }: Props) {
     );
   }
 
-  if (!data) return <ProfileNotFound />;
+  if (!data) notFound();
 
   const student = toStudent(data);
   const availabilityText = formatAvailability(student.availability);
@@ -106,7 +106,9 @@ export function ProfileDetail({ slug }: Props) {
                 {student.university}
               </strong>
               <br />
-              {student.course} · {student.year} year
+              {[student.course, yearLabel(student.year)]
+                .filter(Boolean)
+                .join(" · ")}
             </div>
 
             <ProfileQuickFacts

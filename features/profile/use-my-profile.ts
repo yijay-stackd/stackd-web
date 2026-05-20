@@ -15,5 +15,9 @@ export function useMyProfile() {
     queryKey: profilesKeys.mine(),
     enabled,
     queryFn: ({ signal }) => profilesApi.mine(getHttpClient(), signal),
+    // Always refetch when a screen that reads "my profile" mounts. Avoids
+    // showing stale-cache data (no photo, missing skills/contact) right after
+    // a create/edit when the side-effect writes haven't propagated yet.
+    refetchOnMount: "always",
   });
 }

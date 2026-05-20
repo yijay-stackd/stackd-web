@@ -11,8 +11,9 @@ import {
   type UpdateStatusInput,
 } from "@/lib/api/profiles";
 
-// Cache hygiene rule used by every mutation here:
-// - setQueryData for the rows we just authoritatively know (mine + bySlug)
+// Cache hygiene rule used by mutations whose response is the COMPLETE row
+// (i.e. update/status). For these we can prime mine/bySlug directly:
+// - setQueryData for the rows we just authoritatively know
 // - invalidate only the feed prefix — refetching mine/bySlug would discard
 //   the data we literally just wrote.
 function primeAndInvalidate(
@@ -24,12 +25,23 @@ function primeAndInvalidate(
   qc.invalidateQueries({ queryKey: profilesKeys.feeds() });
 }
 
+// CREATE is a special case: the POST /profiles response is INCOMPLETE because
+// skills/contacts/photo/cv are attached via separate follow-up calls fired
+// after this mutation resolves. Priming mine/bySlug here would poison those
+// caches with empty relations until the next refetch — the exact bug that
+// shows the user a "live" profile with no skills, no contact, no photo.
+//
+// Instead: only invalidate the feed prefix (so the directory reflects the new
+// row) and leave mine/bySlug alone. The caller (join-form) seeds them after
+// the follow-ups complete, with the canonical row pulled from GET /profiles.
 export function useCreateProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: CreateProfileInput) =>
       profilesApi.create(getHttpClient(), body),
-    onSuccess: (profile) => primeAndInvalidate(qc, profile),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: profilesKeys.feeds() });
+    },
   });
 }
 
