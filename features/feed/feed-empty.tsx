@@ -55,13 +55,10 @@ export function FeedEmpty({ query, activeTag, onClearFilters }: Props) {
   return (
     <div className="flex flex-col items-center py-20 text-center">
       <div className="mx-auto mb-6 grid h-22 w-22 animate-pop place-items-center rounded-lg bg-accent text-accent-fg">
-        <svg width="38" height="38" viewBox="0 0 32 32" fill="none">
-          <path
-            d="M16 6V26M6 16H26"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-          />
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="5" y="5" width="14" height="3.8" rx="1.3" fill="currentColor" />
+          <rect x="5" y="10.1" width="9.5" height="3.8" rx="1.3" fill="currentColor" />
+          <rect x="5" y="15.2" width="14" height="3.8" rx="1.3" fill="currentColor" />
         </svg>
       </div>
       <h3 className="mb-2 text-balance text-[22px] font-semibold tracking-[-0.02em]">

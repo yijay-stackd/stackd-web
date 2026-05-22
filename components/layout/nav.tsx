@@ -7,6 +7,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 import { useMyProfile } from "@/features/profile/use-my-profile";
 import { toStudent } from "@/lib/api/profile-mapper";
 import { initials } from "@/utils/student";
+import { StackdMark } from "@/components/brand/stackd-mark";
 
 export function Nav() {
   const pathname = usePathname();
@@ -55,10 +56,13 @@ export function Nav() {
       <div className="mx-auto flex h-13 max-w-220 items-center justify-between px-7 max-[640px]:px-5">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-[17px] font-bold tracking-[-0.02em]"
+          className="group inline-flex items-center gap-2.5 text-[17px] font-bold tracking-[-0.02em]"
         >
-          <span className="h-2 w-2 rounded-full bg-accent" />
-          stackd
+          <StackdMark
+            size={22}
+            className="block shrink-0 rounded-md transition-transform duration-250 ease-[cubic-bezier(0.2,0.8,0.2,1)] group-hover:-translate-y-px group-hover:scale-[1.06]"
+          />
+          <span className="inline-block translate-y-[0.5px] leading-none">stackd</span>
         </Link>
         <nav className="flex items-center gap-1.5">
           <Link

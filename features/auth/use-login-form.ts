@@ -7,7 +7,7 @@ import { useAuth } from "@/features/auth/auth-provider";
 
 const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const OTP_LEN = 6;
-const RESEND_SECONDS = 30;
+const RESEND_SECONDS = 60;
 
 export type LoginPhase =
   | "idle"
