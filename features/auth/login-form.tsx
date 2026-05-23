@@ -43,14 +43,14 @@ export function LoginForm() {
         {showEmailForm && (
           <>
             <div className="mb-3.5 block font-mono text-[11px] uppercase tracking-[0.1em] text-muted">
-              Sign in · No password
+              No password · No signup form
             </div>
             <h1 className="mb-3 text-[clamp(28px,4vw,40px)] font-semibold leading-[1.05] tracking-[-0.028em]">
-              Welcome back.
+              Welcome to stackd.
             </h1>
             <p className="mb-10 text-[15px] text-muted">
-              Enter your email and we&apos;ll send you a 6-digit code. New here?
-              You&apos;ll create your profile after signing in.
+              Drop your email and we&apos;ll send you a 6-digit code. New here?
+              You&apos;ll set up your profile right after.
             </p>
 
             <form onSubmit={send} noValidate>
