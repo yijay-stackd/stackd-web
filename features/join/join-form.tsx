@@ -272,6 +272,15 @@ export function JoinForm() {
     }
   }
 
+  // Loading and celebration are rendered as REPLACEMENTS for the form, not
+  // overlays. The form sits inside `animate-pageIn` which applies a transform;
+  // any `position: fixed` descendant of a transformed ancestor positions
+  // relative to that ancestor instead of the viewport — which is why the
+  // overlay was offset on mobile. Swapping the entire view avoids the trap
+  // and keeps the loading screen viewport-centered on every device.
+  if (celebrating) return <Celebration firstName={firstName} />;
+  if (submitting) return <SubmittingOverlay />;
+
   return (
     <div className="animate-pageIn">
       <div className="mx-auto max-w-135 px-7 pt-13 pb-24 max-[640px]:px-5">
@@ -333,9 +342,6 @@ export function JoinForm() {
           onSubmit={handleSubmit}
         />
       </div>
-
-      {submitting && !celebrating && <SubmittingOverlay />}
-      {celebrating && <Celebration firstName={firstName} />}
     </div>
   );
 }
