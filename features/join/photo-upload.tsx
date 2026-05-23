@@ -8,18 +8,9 @@ import { compressPhotoForUpload } from "@/lib/image-compress";
 type Props = {
   value: string | null;
   onChange: (v: string | null) => void;
-  // Emitted alongside onChange when a real File is picked (not for backend
-  // round-trips). The data-URL preview drives the UI; this drives the upload.
   onFileChange?: (file: File | null) => void;
   name: string;
 };
-
-function isHeicFile(file: File): boolean {
-  const t = file.type.toLowerCase();
-  if (t === "image/heic" || t === "image/heif") return true;
-  const n = file.name.toLowerCase();
-  return n.endsWith(".heic") || n.endsWith(".heif");
-}
 
 export function PhotoUpload({ value, onChange, onFileChange, name }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -27,15 +18,12 @@ export function PhotoUpload({ value, onChange, onFileChange, name }: Props) {
   // superseded by a newer one before its compression resolved.
   const pickGenRef = useRef(0);
   const [busy, setBusy] = useState(false);
-  // Inline error displayed under the upload control. Replaces native alert()
-  // — non-blocking, styleable, dismissable on next interaction.
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const ini = name ? initials(name) : "";
   const previewBorder = value ? "border-solid" : "border-dashed";
 
-  // Browsers suppress the `change` event when the user re-picks the same file.
-  // Clearing `.value` between picks restores the ability to retry after an
-  // error (size cap, HEIC reject, compression throw).
+  // Browsers suppress the `change` event for the same file twice — clear so
+  // the user can retry after an error.
   function resetInput(): void {
     if (inputRef.current) inputRef.current.value = "";
   }
@@ -45,17 +33,13 @@ export function PhotoUpload({ value, onChange, onFileChange, name }: Props) {
     setErrorMsg(null);
 
     // Sanity ceiling — anything past this is a phone burst / RAW the user
-    // didn't mean to pick. HEIC gets a tighter cap because libheif decode
-    // can balloon a 20 MB file to hundreds of MB in RAM on low-end phones.
-    const cap = isHeicFile(file)
-      ? FILES.photo.heicMaxBytes
-      : FILES.photo.preCompressMaxBytes;
-    if (file.size > cap) {
+    // didn't mean to pick.
+    if (file.size > FILES.photo.preCompressMaxBytes) {
       onFileChange?.(null);
       onChange(null);
       setErrorMsg(
         `That image is too large (${Math.round(file.size / 1024 / 1024)} MB). Pick something under ${Math.round(
-          cap / 1024 / 1024
+          FILES.photo.preCompressMaxBytes / 1024 / 1024
         )} MB.`
       );
       resetInput();
@@ -65,12 +49,7 @@ export function PhotoUpload({ value, onChange, onFileChange, name }: Props) {
     const myGen = ++pickGenRef.current;
     setBusy(true);
     try {
-      // Resize + re-encode to JPEG in the browser. Kills HEIC, kills size
-      // overruns, kills EXIF orientation surprises. Backend still re-processes
-      // via sharp — this is the UX layer.
       const compressed = await compressPhotoForUpload(file);
-
-      // Superseded by a newer pick while we were compressing — drop result.
       if (myGen !== pickGenRef.current) return;
 
       onFileChange?.(compressed);
@@ -84,9 +63,18 @@ export function PhotoUpload({ value, onChange, onFileChange, name }: Props) {
       if (myGen !== pickGenRef.current) return;
       onFileChange?.(null);
       onChange(null);
-      const message =
-        err instanceof Error ? err.message : "could not process image";
-      setErrorMsg(`Couldn't read that image. ${message}`);
+      // Full diagnostic to console so it can be inspected; user gets a
+      // short, actionable message tuned to the most common failure mode.
+      console.error("[photo-upload] compression failed", { name: file.name, type: file.type, size: file.size, err });
+      const looksHeic =
+        /\.(heic|heif)$/i.test(file.name) ||
+        file.type === "image/heic" ||
+        file.type === "image/heif";
+      setErrorMsg(
+        looksHeic
+          ? "HEIC isn't supported in this browser. On iPhone, retake the photo with Settings → Camera → Formats → Most Compatible, or pick a JPG from your gallery."
+          : "Couldn't read that image. Try a JPG or PNG from your gallery."
+      );
     } finally {
       if (myGen === pickGenRef.current) setBusy(false);
       resetInput();
@@ -129,7 +117,7 @@ export function PhotoUpload({ value, onChange, onFileChange, name }: Props) {
           {busy ? "Processing…" : value ? "Replace photo" : "Upload a photo"}
         </button>
         <div className="mt-1 text-xs">
-          JPG, PNG, HEIC, or WebP. Square works best. {!value && "(Optional)"}
+          JPG, PNG, or WebP. Square works best. {!value && "(Optional)"}
         </div>
         {errorMsg && (
           <div

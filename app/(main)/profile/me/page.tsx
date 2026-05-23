@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/auth-provider";
 import { useMyProfile } from "@/features/profile/use-my-profile";
+import { LoadingPage } from "@/components/ui/loading-page";
 
 export default function ProfileMePage() {
   const router = useRouter();
@@ -24,9 +25,5 @@ export default function ProfileMePage() {
     }
   }, [status, profile, isLoading, router]);
 
-  return (
-    <div className="mx-auto max-w-220 px-7 py-15 text-center text-muted max-[640px]:px-5">
-      Loading…
-    </div>
-  );
+  return <LoadingPage title="Finding your profile…" />;
 }

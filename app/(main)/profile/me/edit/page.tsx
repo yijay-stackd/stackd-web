@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/auth-provider";
 import { useMyProfile } from "@/features/profile/use-my-profile";
 import { EditProfileForm } from "@/features/profile/edit-profile-form";
+import { LoadingPage } from "@/components/ui/loading-page";
 
 export default function EditProfileMePage() {
   const router = useRouter();
@@ -22,11 +23,7 @@ export default function EditProfileMePage() {
   }, [status, profile, isLoading, router]);
 
   if (status !== "authenticated" || isLoading || !profile) {
-    return (
-      <div className="mx-auto max-w-220 px-7 py-15 text-center text-muted max-[640px]:px-5">
-        Loading…
-      </div>
-    );
+    return <LoadingPage title="Loading your profile…" />;
   }
 
   return <EditProfileForm profile={profile} />;

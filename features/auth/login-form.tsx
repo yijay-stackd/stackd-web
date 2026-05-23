@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useLoginForm } from "./use-login-form";
+import { LoadingPage } from "@/components/ui/loading-page";
 
 const baseInputClass =
   "w-full rounded-md border bg-white px-3.5 py-2.75 text-[14.5px] outline-none transition-[border-color,box-shadow] duration-150 focus:border-fg focus:shadow-focus-ring";
@@ -240,20 +241,7 @@ export function LoginForm() {
           </div>
         )}
 
-        {phase === "verifying" && (
-          <div className="py-20 text-center">
-            <div className="mb-6 inline-flex">
-              <span
-                className="inline-block h-8 w-8 animate-spin rounded-full border-[2.5px] border-fg border-r-transparent"
-                style={{ animationDuration: "0.7s" }}
-              />
-            </div>
-            <h2 className="mb-1.5 text-2xl font-semibold tracking-[-0.02em]">
-              Signing you in…
-            </h2>
-            <p className="text-[15px] text-muted">Just a moment.</p>
-          </div>
-        )}
+        {phase === "verifying" && <LoadingPage title="Signing you in…" />}
       </div>
     </div>
   );

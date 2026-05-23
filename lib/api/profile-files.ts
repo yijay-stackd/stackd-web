@@ -21,18 +21,15 @@ const CV_MAX_BYTES = 8 * 1024 * 1024;
 // anything reasonable to <1 MB. Anything bigger than this is almost
 // certainly a phone burst / RAW file the user picked by accident.
 const PHOTO_PRE_COMPRESS_MAX_BYTES = 30 * 1024 * 1024;
-// Tighter cap for HEIC. libheif (wasm) holds the entire decoded RGBA in
-// memory — a 15 MB HEIC can expand to 200+ MB and OOM Mobile Safari on
-// 4 GB iPhones. 10 MB is well above any normal phone shot.
-const PHOTO_HEIC_MAX_BYTES = 10 * 1024 * 1024;
 
 export const FILES = {
   photo: {
     bucket: PHOTO_BUCKET,
     maxBytes: PHOTO_MAX_BYTES,
     preCompressMaxBytes: PHOTO_PRE_COMPRESS_MAX_BYTES,
-    heicMaxBytes: PHOTO_HEIC_MAX_BYTES,
-    accept: "image/jpeg,image/png,image/webp,image/heic,image/heif",
+    // HEIC intentionally omitted — iOS Safari converts HEIC→JPEG when not
+    // listed here. Standard pattern used by Instagram / Shopify / Vinted.
+    accept: "image/jpeg,image/png,image/webp",
   },
   cv: {
     bucket: CV_BUCKET,
