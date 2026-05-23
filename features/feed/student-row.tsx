@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { initials, statusLabel, yearLabel } from "@/utils/student";
 import type { Student } from "@/types/student";
+import { AvatarImage } from "@/components/ui/avatar-image";
 
 type Props = {
   student: Student;
@@ -29,12 +30,12 @@ export function StudentRow({ student, index, isNew, onTagClick }: Props) {
         className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[10px] text-[18px] font-semibold tracking-[-0.02em] text-[rgba(10,10,10,0.55)] transition-transform duration-[250ms] group-hover:scale-[1.04] max-[720px]:h-12 max-[720px]:w-12 max-[720px]:text-[15px]"
         style={{ background: student.photoColor }}
       >
-        {student.photo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img className="h-full w-full object-cover" src={student.photo} alt="" />
-        ) : (
-          <span>{initials(student.name)}</span>
-        )}
+        <AvatarImage
+          src={student.photo ?? null}
+          alt=""
+          className="h-full w-full object-cover"
+          fallback={<span>{initials(student.name)}</span>}
+        />
         {isNew && (
           <span className="absolute -top-[3px] -right-[3px] h-[14px] w-[14px] rounded-full border-2 border-bg bg-accent" />
         )}

@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { initials } from "@/utils/student";
+import { FILES } from "@/lib/api/profile-files";
+import { compressPhotoForUpload } from "@/lib/image-compress";
 
 type Props = {
   value: string | null;
@@ -12,17 +14,83 @@ type Props = {
   name: string;
 };
 
+function isHeicFile(file: File): boolean {
+  const t = file.type.toLowerCase();
+  if (t === "image/heic" || t === "image/heif") return true;
+  const n = file.name.toLowerCase();
+  return n.endsWith(".heic") || n.endsWith(".heif");
+}
+
 export function PhotoUpload({ value, onChange, onFileChange, name }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  // Generation counter — discards results from a pick that's been
+  // superseded by a newer one before its compression resolved.
+  const pickGenRef = useRef(0);
+  const [busy, setBusy] = useState(false);
+  // Inline error displayed under the upload control. Replaces native alert()
+  // — non-blocking, styleable, dismissable on next interaction.
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const ini = name ? initials(name) : "";
   const previewBorder = value ? "border-solid" : "border-dashed";
 
-  function handleFile(file?: File) {
+  // Browsers suppress the `change` event when the user re-picks the same file.
+  // Clearing `.value` between picks restores the ability to retry after an
+  // error (size cap, HEIC reject, compression throw).
+  function resetInput(): void {
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  async function handleFile(file?: File) {
     if (!file) return;
-    onFileChange?.(file);
-    const reader = new FileReader();
-    reader.onload = (e) => onChange((e.target?.result as string) ?? null);
-    reader.readAsDataURL(file);
+    setErrorMsg(null);
+
+    // Sanity ceiling — anything past this is a phone burst / RAW the user
+    // didn't mean to pick. HEIC gets a tighter cap because libheif decode
+    // can balloon a 20 MB file to hundreds of MB in RAM on low-end phones.
+    const cap = isHeicFile(file)
+      ? FILES.photo.heicMaxBytes
+      : FILES.photo.preCompressMaxBytes;
+    if (file.size > cap) {
+      onFileChange?.(null);
+      onChange(null);
+      setErrorMsg(
+        `That image is too large (${Math.round(file.size / 1024 / 1024)} MB). Pick something under ${Math.round(
+          cap / 1024 / 1024
+        )} MB.`
+      );
+      resetInput();
+      return;
+    }
+
+    const myGen = ++pickGenRef.current;
+    setBusy(true);
+    try {
+      // Resize + re-encode to JPEG in the browser. Kills HEIC, kills size
+      // overruns, kills EXIF orientation surprises. Backend still re-processes
+      // via sharp — this is the UX layer.
+      const compressed = await compressPhotoForUpload(file);
+
+      // Superseded by a newer pick while we were compressing — drop result.
+      if (myGen !== pickGenRef.current) return;
+
+      onFileChange?.(compressed);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (myGen !== pickGenRef.current) return;
+        onChange((e.target?.result as string) ?? null);
+      };
+      reader.readAsDataURL(compressed);
+    } catch (err) {
+      if (myGen !== pickGenRef.current) return;
+      onFileChange?.(null);
+      onChange(null);
+      const message =
+        err instanceof Error ? err.message : "could not process image";
+      setErrorMsg(`Couldn't read that image. ${message}`);
+    } finally {
+      if (myGen === pickGenRef.current) setBusy(false);
+      resetInput();
+    }
   }
 
   return (
@@ -48,20 +116,29 @@ export function PhotoUpload({ value, onChange, onFileChange, name }: Props) {
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept={FILES.photo.accept}
           className="hidden"
-          onChange={(e) => handleFile(e.target.files?.[0])}
+          onChange={(e) => void handleFile(e.target.files?.[0])}
         />
         <button
           type="button"
-          className="font-medium text-fg underline underline-offset-2"
+          disabled={busy}
+          className="font-medium text-fg underline underline-offset-2 disabled:opacity-60"
           onClick={() => inputRef.current?.click()}
         >
-          {value ? "Replace photo" : "Upload a photo"}
+          {busy ? "Processing…" : value ? "Replace photo" : "Upload a photo"}
         </button>
         <div className="mt-1 text-xs">
-          JPG or PNG. Square works best. {!value && "(Optional)"}
+          JPG, PNG, HEIC, or WebP. Square works best. {!value && "(Optional)"}
         </div>
+        {errorMsg && (
+          <div
+            role="alert"
+            className="mt-2 rounded-md border border-danger bg-[#fef2f2] px-2.5 py-1.5 font-mono text-[11px] leading-snug tracking-[0.02em] text-danger"
+          >
+            ↳ {errorMsg}
+          </div>
+        )}
       </div>
     </div>
   );

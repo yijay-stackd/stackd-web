@@ -19,6 +19,20 @@ export type LoginPhase =
 // "Invalid token", "expired", "incorrect" — Supabase wording varies by version
 // and locale, so we keyword-match conservatively. Anything else is treated as
 // a non-mismatch failure (rate limit, network, etc.) and shown as plain text.
+// Finds a run of exactly `len` digits with no digit on either side. Equivalent
+// to `(?<!\d)\d{len}(?!\d)` but written manually so older Safari (<16.4),
+// which doesn't parse regex lookbehind, doesn't throw at module load.
+function findIsolatedDigitRun(str: string, len: number): string | null {
+  const re = new RegExp(`\\d{${len}}`, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(str)) !== null) {
+    const before = m.index > 0 ? str[m.index - 1] : "";
+    const after = m.index + len < str.length ? str[m.index + len] : "";
+    if (!/\d/.test(before) && !/\d/.test(after)) return m[0];
+  }
+  return null;
+}
+
 function isOtpMismatch(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
@@ -158,14 +172,29 @@ export function useLoginForm() {
 
   const handlePastedString = useCallback(
     (str: string, startAt = 0) => {
-      const cleaned = str.replace(/\D/g, "").slice(0, OTP_LEN - startAt);
+      // Prefer a contiguous OTP_LEN-digit run (handles emails like
+      // "Your stackd code 123456 expires in 10 min" without picking up the
+      // "10" or other surrounding numbers). Fall back to digit-only strip
+      // for cases where the user manually selected just the digits.
+      //
+      // Hand-rolled instead of `(?<!\\d)\\d{N}(?!\\d)` because lookbehind in
+      // regex literals only landed in Safari/iOS 16.4 — older iPhones would
+      // throw SyntaxError at module init.
+      const exactRun = findIsolatedDigitRun(str, OTP_LEN);
+      const cleaned =
+        exactRun ?? str.replace(/\D/g, "").slice(0, OTP_LEN - startAt);
       if (!cleaned) return;
+
+      // Full-code paste should always populate from box 0 — pasting into the
+      // middle box was leaving the earlier boxes empty.
+      const offset = cleaned.length >= OTP_LEN ? 0 : startAt;
+
       const next = digits.slice();
-      for (let k = 0; k < cleaned.length; k++) {
-        next[startAt + k] = cleaned[k];
+      for (let k = 0; k < cleaned.length && offset + k < OTP_LEN; k++) {
+        next[offset + k] = cleaned[k];
       }
       setDigits(next);
-      const landed = Math.min(startAt + cleaned.length, OTP_LEN - 1);
+      const landed = Math.min(offset + cleaned.length, OTP_LEN - 1);
       inputsRef.current[landed]?.focus();
       const joined = next.join("");
       if (joined.length === OTP_LEN && !next.includes("")) {

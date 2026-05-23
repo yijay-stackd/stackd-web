@@ -11,14 +11,28 @@ export type SignedUrlResponse = {
 const PHOTO_BUCKET = "profile-photos";
 const CV_BUCKET = "profile-cvs";
 
-const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+// Matches stackd-backend PHOTO_MAX_BYTES. Real uploads go through
+// `compressPhotoForUpload` first and land far below this, so the limit is
+// only ever a backstop for un-compressed bypasses.
+const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
 const CV_MAX_BYTES = 8 * 1024 * 1024;
+
+// Pre-compression input cap — generous, since the compressor will shrink
+// anything reasonable to <1 MB. Anything bigger than this is almost
+// certainly a phone burst / RAW file the user picked by accident.
+const PHOTO_PRE_COMPRESS_MAX_BYTES = 30 * 1024 * 1024;
+// Tighter cap for HEIC. libheif (wasm) holds the entire decoded RGBA in
+// memory — a 15 MB HEIC can expand to 200+ MB and OOM Mobile Safari on
+// 4 GB iPhones. 10 MB is well above any normal phone shot.
+const PHOTO_HEIC_MAX_BYTES = 10 * 1024 * 1024;
 
 export const FILES = {
   photo: {
     bucket: PHOTO_BUCKET,
     maxBytes: PHOTO_MAX_BYTES,
-    accept: "image/jpeg,image/png,image/webp",
+    preCompressMaxBytes: PHOTO_PRE_COMPRESS_MAX_BYTES,
+    heicMaxBytes: PHOTO_HEIC_MAX_BYTES,
+    accept: "image/jpeg,image/png,image/webp,image/heic,image/heif",
   },
   cv: {
     bucket: CV_BUCKET,
@@ -42,14 +56,19 @@ function buildForm(file: File): FormData {
 }
 
 export const profileFilesApi = {
+  // Uploads retry only on transient errors (NetworkError, 408/429/5xx).
+  // The fetcher's isRetryable() never retries 4xx, so MIME / size validation
+  // failures still fail loud. Multipart body (FormData) is safely re-readable.
   uploadPhoto(http: Http, profileId: string, file: File): Promise<ProfileResponse> {
     return http.post<ProfileResponse>(
       `/profiles/${profileId}/photo`,
       undefined,
-      { multipart: buildForm(file), skipRetry: true }
+      { multipart: buildForm(file) }
     );
   },
 
+  // Delete is destructive — keep skipRetry so a stalled response doesn't
+  // accidentally fire a second delete after the user has already navigated.
   deletePhoto(http: Http, profileId: string): Promise<ProfileResponse> {
     return http.delete<ProfileResponse>(`/profiles/${profileId}/photo`, {
       skipRetry: true,
@@ -60,7 +79,7 @@ export const profileFilesApi = {
     return http.post<ProfileResponse>(
       `/profiles/${profileId}/cv`,
       undefined,
-      { multipart: buildForm(file), skipRetry: true }
+      { multipart: buildForm(file) }
     );
   },
 

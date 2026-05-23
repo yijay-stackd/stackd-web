@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/http/errors";
 import { formatAvailability, initials, statusLabel, yearLabel } from "@/utils/student";
 import { ProfileQuickFacts } from "./profile-quickfacts";
 import { ProfileContact } from "./profile-contact";
+import { AvatarImage } from "@/components/ui/avatar-image";
 
 type Props = {
   slug: string;
@@ -63,23 +64,21 @@ export function ProfileDetail({ slug }: Props) {
 
         <article className="grid grid-cols-[200px_1fr] items-start gap-10 pb-20 max-[720px]:grid-cols-1 max-[720px]:gap-6">
           <div className="relative h-50 w-50 overflow-hidden rounded-[14px] border border-line bg-[#f1efe6] max-[720px]:h-35 max-[720px]:w-35">
-            {student.photo ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={student.photo}
-                alt={student.name}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div
-                className="absolute inset-0"
-                style={{ background: student.photoColor }}
-              >
-                <span className="absolute inset-0 grid place-items-center text-[80px] font-semibold tracking-[-0.04em] text-[rgba(10,10,10,0.5)]">
-                  {initials(student.name)}
-                </span>
-              </div>
-            )}
+            <AvatarImage
+              src={student.photo ?? null}
+              alt={student.name}
+              className="h-full w-full object-cover"
+              fallback={
+                <div
+                  className="absolute inset-0"
+                  style={{ background: student.photoColor }}
+                >
+                  <span className="absolute inset-0 grid place-items-center text-[80px] font-semibold tracking-[-0.04em] text-[rgba(10,10,10,0.5)]">
+                    {initials(student.name)}
+                  </span>
+                </div>
+              }
+            />
           </div>
 
           <div>

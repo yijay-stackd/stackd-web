@@ -8,12 +8,13 @@ import { useMyProfile } from "@/features/profile/use-my-profile";
 import { toStudent } from "@/lib/api/profile-mapper";
 import { initials } from "@/utils/student";
 import { StackdMark } from "@/components/brand/stackd-mark";
+import { AvatarImage } from "@/components/ui/avatar-image";
 
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const { data: myProfile } = useMyProfile();
+  const { data: myProfile, isPending: myProfilePending } = useMyProfile();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -121,12 +122,12 @@ export function Nav() {
                       : undefined
                   }
                 >
-                  {currentStudent && currentStudent.photo ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={currentStudent.photo}
+                  {currentStudent ? (
+                    <AvatarImage
+                      src={currentStudent.photo ?? null}
                       alt=""
                       className="h-full w-full object-cover"
+                      fallback={<span>{avatarChar()}</span>}
                     />
                   ) : (
                     <span>{avatarChar()}</span>
@@ -158,7 +159,20 @@ export function Nav() {
                   }}
                 >
                   <style>{`@keyframes popIn { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }`}</style>
-                  {currentStudent ? (
+                  {myProfilePending && !currentStudent ? (
+                    <div className="flex flex-col gap-2.5 px-3.5 py-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-2">
+                        Signed in as
+                      </div>
+                      <div className="break-all text-[12.5px] leading-snug text-fg">
+                        {user.email}
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 border-t border-line pt-3 text-[12px] text-muted">
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-[1.5px] border-line border-t-fg" />
+                        Loading your profile…
+                      </div>
+                    </div>
+                  ) : currentStudent ? (
                     <>
                       <div className="px-3 pt-2.5 pb-2">
                         <div className="text-[13.5px] font-semibold leading-tight tracking-[-0.01em]">

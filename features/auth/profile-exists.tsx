@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/auth-provider";
 import { initials } from "@/utils/student";
 import type { Student } from "@/types/student";
+import { AvatarImage } from "@/components/ui/avatar-image";
 
 type Props = {
   student: Student;
@@ -49,16 +50,12 @@ export function ProfileExists({ student, email }: Props) {
             className="grid h-13 w-13 place-items-center overflow-hidden rounded-[10px] text-[17px] font-semibold tracking-[-0.02em] text-[rgba(10,10,10,0.55)]"
             style={{ background: student.photoColor }}
           >
-            {student.photo ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={student.photo}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span>{initials(student.name)}</span>
-            )}
+            <AvatarImage
+              src={student.photo ?? null}
+              alt=""
+              className="h-full w-full object-cover"
+              fallback={<span>{initials(student.name)}</span>}
+            />
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-base font-semibold leading-tight tracking-[-0.018em]">

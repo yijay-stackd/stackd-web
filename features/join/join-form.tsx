@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateProfile } from "@/features/profile/use-profile-mutations";
@@ -9,18 +9,53 @@ import {
   yearFromString,
 } from "@/lib/api/profile-mapper";
 import { dedupeSkillLabels, MAX_SKILLS, skillsApi } from "@/lib/api/skills";
-import { profileFilesApi } from "@/lib/api/profile-files";
+import { profileFilesApi, publicPhotoUrl } from "@/lib/api/profile-files";
 import { profileContactsApi } from "@/lib/api/profile-contacts";
 import { profilesApi, profilesKeys } from "@/lib/api/profiles";
 import { getHttpClient } from "@/lib/http/client";
 import { ApiError } from "@/lib/http/errors";
 import { Celebration } from "./celebration";
+import { SubmittingOverlay } from "./submitting-overlay";
 import {
   StudentForm,
   type StudentFormValues,
 } from "@/components/forms/student-form";
 
 const REDIRECT_DELAY_MS = 1700;
+// Supabase public URLs are eventually consistent — a HEAD against the newly
+// uploaded key can 404 for a few seconds even after the upload returns 200.
+// Poll the URL until it resolves (or give up) before navigating, so the
+// profile page renders with the photo on first paint instead of a broken img.
+const PHOTO_READY_TIMEOUT_MS = 6000;
+const PHOTO_READY_POLL_MS = 400;
+
+async function waitForPhotoReady(url: string): Promise<void> {
+  const deadline = Date.now() + PHOTO_READY_TIMEOUT_MS;
+  // Use Image() rather than fetch() to dodge CORS preflight on the Supabase
+  // public bucket. A successful load also primes the browser cache so the
+  // profile page's <img> renders instantly.
+  while (Date.now() < deadline) {
+    const ok = await new Promise<boolean>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      // Cache-bust each attempt so a cached 404 doesn't pin the result.
+      img.src = `${url}?t=${Date.now()}`;
+    });
+    if (ok) {
+      // Final non-busted load → seeds the cache under the canonical URL the
+      // profile page will request.
+      await new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = url;
+      });
+      return;
+    }
+    await new Promise((r) => setTimeout(r, PHOTO_READY_POLL_MS));
+  }
+}
 
 // Best-effort side-effects after a profile is created. Each call is allowed
 // to fail without killing the rest — partial success is OK and the user can
@@ -44,7 +79,14 @@ async function runFollowups(
     tasks.push(
       profileFilesApi
         .uploadPhoto(http, profileId, values.photoFile)
-        .then(() => ({ ok: true, label: "photo" }))
+        .then(async (resp) => {
+          // Wait until the public URL actually serves the file. Without this
+          // poll the redirect can fire while Supabase is still propagating,
+          // and the profile page renders a broken <img>.
+          const url = publicPhotoUrl(resp.photo_key);
+          if (url) await waitForPhotoReady(url);
+          return { ok: true, label: "photo" };
+        })
         .catch((e: unknown) => ({
           ok: false,
           label: "photo",
@@ -118,6 +160,11 @@ export function JoinForm() {
   const qc = useQueryClient();
   const createProfile = useCreateProfile();
 
+  // Single `submitting` flag covering create + followups + bySlug refetch.
+  // `createProfile.isPending` alone has a gap between mutateAsync resolving
+  // and the followups completing, during which the button re-enables and
+  // the user thinks nothing happened.
+  const [submitting, setSubmitting] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -125,6 +172,27 @@ export function JoinForm() {
   // Slug of the just-created profile — only set after a successful create,
   // used by the "Continue anyway" button when followups partially failed.
   const [profileSlug, setProfileSlug] = useState<string | null>(null);
+
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  const warningsRef = useRef<HTMLDivElement | null>(null);
+
+  // The submit button sits at the bottom of a long form. When the inline
+  // error/warning banner appears at the top, the user can't see it. Scroll
+  // it into view whenever it shows up.
+  useEffect(() => {
+    if (submitError && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [submitError]);
+
+  useEffect(() => {
+    if (followupWarnings.length > 0 && warningsRef.current) {
+      warningsRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [followupWarnings]);
 
   async function handleSubmit(values: StudentFormValues) {
     setSubmitError(null);
@@ -142,6 +210,7 @@ export function JoinForm() {
       return;
     }
 
+    setSubmitting(true);
     try {
       const profile = await createProfile.mutateAsync({
         name: values.name,
@@ -166,6 +235,7 @@ export function JoinForm() {
         setFollowupWarnings(
           failed.map((r) => `${r.label}: ${r.message ?? "failed"}`)
         );
+        setSubmitting(false);
         return;
       }
 
@@ -178,7 +248,8 @@ export function JoinForm() {
       qc.setQueryData(profilesKeys.bySlug(profile.slug), fresh);
       qc.setQueryData(profilesKeys.mine(), fresh);
 
-      // Clean success → celebrate, then redirect.
+      // Clean success → celebrate, then redirect. Keep `submitting` true so
+      // the overlay stays up until Celebration takes over.
       setFirstName(values.name.split(" ")[0]);
       setCelebrating(true);
       setTimeout(() => {
@@ -197,6 +268,7 @@ export function JoinForm() {
             : "Couldn't create your profile. Try again."
         );
       }
+      setSubmitting(false);
     }
   }
 
@@ -214,13 +286,21 @@ export function JoinForm() {
         </p>
 
         {submitError && (
-          <div className="mb-6 rounded-md border border-danger bg-[#fef2f2] px-3.5 py-3 text-[13.5px] text-danger">
+          <div
+            ref={errorRef}
+            role="alert"
+            className="mb-6 rounded-md border border-danger bg-[#fef2f2] px-3.5 py-3 text-[13.5px] text-danger"
+          >
             {submitError}
           </div>
         )}
 
         {followupWarnings.length > 0 && (
-          <div className="mb-6 rounded-md border border-[#ecdfa3] bg-[#fdfaeb] px-3.5 py-3 text-[13px] text-fg">
+          <div
+            ref={warningsRef}
+            role="alert"
+            className="mb-6 rounded-md border border-[#ecdfa3] bg-[#fdfaeb] px-3.5 py-3 text-[13px] text-fg"
+          >
             <strong className="block font-mono text-[11px] uppercase tracking-widest text-muted">
               Profile saved — some bits didn&apos;t attach:
             </strong>
@@ -248,12 +328,13 @@ export function JoinForm() {
         <StudentForm
           submitLabel="Go live"
           submittingLabel="Going live…"
-          submitting={createProfile.isPending || celebrating}
+          submitting={submitting}
           showSubmitHint
           onSubmit={handleSubmit}
         />
       </div>
 
+      {submitting && !celebrating && <SubmittingOverlay />}
       {celebrating && <Celebration firstName={firstName} />}
     </div>
   );

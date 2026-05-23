@@ -68,6 +68,19 @@
   input, textarea, select { font-family: inherit; color: inherit; }
 }
 
+/* iOS Safari auto-zooms into any form control whose computed font-size is
+   under 16px on focus. Force the minimum on touch viewports so tapping an
+   input doesn't jolt the page. Sits outside @layer base so it beats the
+   Tailwind utilities (text-[14.5px] etc.) the inputs use on desktop.
+   The OTP digit inputs are already 26px so they're unaffected. */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 @keyframes pulseDot {
   0%, 100% { box-shadow: 0 0 0 2px rgba(214, 255, 61, 0.5); }
   50% { box-shadow: 0 0 0 4px rgba(214, 255, 61, 0.5); }
