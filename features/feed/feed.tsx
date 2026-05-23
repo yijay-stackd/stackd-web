@@ -81,13 +81,12 @@ export function Feed({ demoState = "auto" }: Props) {
     <div className="animate-pageIn">
       <section className="mx-auto max-w-220 px-7 pt-14 pb-7 max-[640px]:px-5 max-[640px]:pt-9 max-[640px]:pb-5">
         <h1 className="mb-3 text-balance text-[clamp(30px,4.4vw,44px)] font-semibold leading-[1.05] tracking-[-0.028em]">
-          Students putting themselves
+          Build a bio.
           <br />
-          on the map.
+          Skip the application.
         </h1>
         <p className="m-0 max-w-[540px] text-pretty text-base text-muted">
-          Browse, find someone interesting, reach out directly. No accounts, no
-          gates.
+          One page, live in a minute. Companies find you and reach out directly.
         </p>
       </section>
 

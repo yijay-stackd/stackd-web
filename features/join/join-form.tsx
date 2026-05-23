@@ -207,11 +207,10 @@ export function JoinForm() {
           Step 1 of 1 · No account needed
         </div>
         <h1 className="mb-3 text-[clamp(28px,4vw,40px)] font-semibold leading-[1.05] tracking-[-0.028em]">
-          Put yourself on the map.
+          Build your bio.
         </h1>
         <p className="mb-10 text-[15px] text-muted">
-          One page. One form. Goes live the moment you hit submit. Companies
-          browse, find you, reach out directly.
+          One page. One form. Live the moment you hit submit — and companies reach out directly.
         </p>
 
         {submitError && (

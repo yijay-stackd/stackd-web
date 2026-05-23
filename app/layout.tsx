@@ -18,8 +18,21 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.wantan.online"),
   title: "stackd · student talent",
-  description: "Students putting themselves on the map. Browse, find, reach out directly.",
+  description: "Build a bio. Skip the application. Companies find you and reach out directly.",
+  openGraph: {
+    title: "stackd · student talent",
+    description: "Build a bio. Skip the application. Companies find you and reach out directly.",
+    url: "https://app.wantan.online",
+    siteName: "stackd",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "stackd · student talent",
+    description: "Build a bio. Skip the application. Companies find you and reach out directly.",
+  },
 };
 
 export default function RootLayout({
