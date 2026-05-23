@@ -8,6 +8,7 @@ import {
   engagementFromOpenTo,
   yearFromString,
 } from "@/lib/api/profile-mapper";
+import { displayToIso } from "@/utils/availability-iso";
 import { dedupeSkillLabels, MAX_SKILLS, skillsApi } from "@/lib/api/skills";
 import { profileFilesApi, publicPhotoUrl } from "@/lib/api/profile-files";
 import { profileContactsApi } from "@/lib/api/profile-contacts";
@@ -212,6 +213,15 @@ export function JoinForm() {
 
     setSubmitting(true);
     try {
+      // Only attach availability when the user actually opted into something —
+      // an empty openTo means they're not signalling a window.
+      const availFromIso = values.availability
+        ? displayToIso(values.availability.from)
+        : null;
+      const availToIso = values.availability
+        ? displayToIso(values.availability.to)
+        : null;
+
       const profile = await createProfile.mutateAsync({
         name: values.name,
         university_id: values.universityId,
@@ -221,6 +231,8 @@ export function JoinForm() {
         city: values.city ?? undefined,
         country_code: values.countryCode ?? undefined,
         engagement_types: engagementFromOpenTo(values.openTo),
+        available_from: availFromIso ?? undefined,
+        available_to: availToIso ?? undefined,
       });
 
       // Profile exists. Run side-effect uploads/skills/contact before deciding

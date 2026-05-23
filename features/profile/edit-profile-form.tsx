@@ -18,6 +18,7 @@ import {
   toStudent,
   yearFromString,
 } from "@/lib/api/profile-mapper";
+import { displayToIso } from "@/utils/availability-iso";
 import { dedupeSkillLabels, MAX_SKILLS } from "@/lib/api/skills";
 import { ApiError } from "@/lib/http/errors";
 import type { ProfileResponse } from "@/lib/api/profiles";
@@ -76,6 +77,13 @@ export function EditProfileForm({ profile }: Props) {
     }
 
     try {
+      const availFromIso = values.availability
+        ? displayToIso(values.availability.from)
+        : null;
+      const availToIso = values.availability
+        ? displayToIso(values.availability.to)
+        : null;
+
       await updateProfile.mutateAsync({
         version: profile.version,
         name: values.name,
@@ -86,6 +94,8 @@ export function EditProfileForm({ profile }: Props) {
         city: values.city ?? undefined,
         country_code: values.countryCode ?? undefined,
         engagement_types: engagementFromOpenTo(values.openTo),
+        available_from: availFromIso ?? undefined,
+        available_to: availToIso ?? undefined,
       });
 
       // Side effects — best-effort, one warning per failure.

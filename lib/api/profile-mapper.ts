@@ -11,6 +11,8 @@ import type {
 } from "./profiles";
 import { publicPhotoUrl } from "./profile-files";
 import type { ContactResponse } from "./profile-contacts";
+import { isoToDisplay } from "@/utils/availability-iso";
+import { detectLength } from "@/utils/availability";
 
 // Backend ContactKindValue is wider than frontend ContactType. Project the
 // extra kinds onto the closest legacy bucket so the single-contact UI still
@@ -62,14 +64,16 @@ export function toStudent(p: ProfileResponse): Student {
     openTo: (p.engagement_types ?? []).filter(
       (e): e is OpenToId => typeof e === "string"
     ),
-    availability:
-      p.available_from || p.available_to
-        ? {
-            from: p.available_from ?? "Now",
-            to: p.available_to ?? "Ongoing",
-          }
-        : null,
-    internshipLength: null,
+    // Backend stores availability as ISO date strings ("2026-06-01"). The
+    // detail view and edit form both consume the "Jun 2026" / "Now" /
+    // "Ongoing" tokens — convert on the way out so neither downstream
+    // consumer has to understand the wire format.
+    availability: buildAvailability(p.available_from, p.available_to),
+    internshipLength: deriveInternshipLength(
+      p.engagement_types,
+      p.available_from,
+      p.available_to
+    ),
     bio: p.bio,
     // Display labels, not slugs. /feed includes both per backend Option-A change.
     tags: p.skills.map((s) => s.label),
@@ -102,4 +106,35 @@ export function yearFromString(value: string): YearValue | null {
   return (YEAR_VALUES as readonly string[]).includes(value)
     ? (value as YearValue)
     : null;
+}
+
+// `from` defaults to "Now" when only `to` is present, and vice-versa, so the
+// dropdowns always have a populated value even if the backend stored a
+// one-sided window.
+function buildAvailability(
+  fromIso: string | null,
+  toIso: string | null
+): { from: string; to: string } | null {
+  if (!fromIso && !toIso) return null;
+  return {
+    from: isoToDisplay(fromIso) ?? "Now",
+    to: isoToDisplay(toIso) ?? "Ongoing",
+  };
+}
+
+// internship_length isn't a column — the UI derives it from the date window
+// using the same heuristic the join form uses. Only meaningful when the user
+// actually opted into internships; otherwise the chip would be misleading.
+function deriveInternshipLength(
+  engagement: EngagementValue[] | null | undefined,
+  fromIso: string | null,
+  toIso: string | null
+): string | null {
+  const wantsInternships = (engagement ?? []).includes(
+    "internships" as EngagementValue
+  );
+  if (!wantsInternships || !fromIso) return null;
+  const fromDisplay = isoToDisplay(fromIso) ?? "Now";
+  const toDisplay = isoToDisplay(toIso) ?? "Ongoing";
+  return detectLength(fromDisplay, toDisplay) || null;
 }
