@@ -218,7 +218,8 @@ export function JoinForm() {
         course: values.course,
         year,
         bio: values.bio,
-        city: values.location ?? undefined,
+        city: values.city ?? undefined,
+        country_code: values.countryCode ?? undefined,
         engagement_types: engagementFromOpenTo(values.openTo),
       });
 

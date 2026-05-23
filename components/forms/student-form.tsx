@@ -17,6 +17,7 @@ import { TagInput } from "@/features/join/tag-input";
 import { CvUpload } from "@/features/join/cv-upload";
 import { AvailabilityField } from "@/features/join/availability-field";
 import { UniversityAutocomplete } from "@/components/forms/university-autocomplete";
+import { LocationPicker } from "@/components/forms/location-picker";
 
 const BIO_LIMIT = 100;
 const TAG_LIMIT = 6;
@@ -37,7 +38,8 @@ export type StudentFormValues = {
   universityId: string | null;
   course: string;
   year: string;
-  location: string | null;
+  city: string | null;
+  countryCode: string | null;
   openTo: OpenToId[];
   availability: Availability | null;
   internshipLength: string | null;
@@ -84,7 +86,10 @@ export function StudentForm({
   const [universityId, setUniversityId] = useState<string | null>(null);
   const [course, setCourse] = useState(init.course || "");
   const [year, setYear] = useState(init.year || "");
-  const [location, setLocation] = useState(init.location || "");
+  const [city, setCity] = useState<string | null>(init.city ?? null);
+  const [countryCode, setCountryCode] = useState<string | null>(
+    init.countryCode ?? null
+  );
   const [openTo, setOpenTo] = useState<OpenToId[]>(
     Array.isArray(init.openTo) ? init.openTo : []
   );
@@ -148,7 +153,8 @@ export function StudentForm({
       universityId,
       course: course.trim(),
       year,
-      location: location.trim() || null,
+      city,
+      countryCode,
       openTo,
       availability: openTo.length
         ? { from: availFrom || "Now", to: availTo || "Ongoing" }
@@ -268,12 +274,14 @@ export function StudentForm({
       </Field>
 
       <Field label="Location" dataField="location" optional>
-        <input
-          className={`${baseInputClass} border-line-2`}
-          type="text"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder="London, UK"
+        <LocationPicker
+          city={city}
+          countryCode={countryCode}
+          onChange={(next) => {
+            setCity(next.city);
+            setCountryCode(next.countryCode);
+          }}
+          inputClass={baseInputClass}
         />
       </Field>
 

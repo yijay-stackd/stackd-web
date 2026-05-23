@@ -21,6 +21,10 @@ export type Student = {
   course: string;
   year: string;
   location: string | null;
+  // Structured location parts powering the LocationPicker. `location` above
+  // remains the joined display string ("London, GB") used by read-only views.
+  city: string | null;
+  countryCode: string | null;
   openTo: OpenToId[];
   availability: Availability | null;
   internshipLength: string | null;

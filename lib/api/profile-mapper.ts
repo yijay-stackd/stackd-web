@@ -54,6 +54,8 @@ export function toStudent(p: ProfileResponse): Student {
     course: p.course,
     year: p.year,
     location: locationString(p),
+    city: p.city,
+    countryCode: p.country_code,
     // OpenToId is the same string set as EngagementValue — see types/student.ts.
     // Backend has been observed to return null entries in this array on some
     // legacy rows; strip them so downstream code can trust the shape.
